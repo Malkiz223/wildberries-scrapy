@@ -47,7 +47,7 @@ class WildberriesSpider(scrapy.Spider):
             yield scrapy.Request(url=url,
                                  callback=self.parse_catalog,
                                  cookies=self.cookies,
-                                 callback=self.parse_catalog)
+                                 meta={'proxy': random.choice(self.proxy_list)})
 
     def parse_catalog(self, response):
         # не уверен, что куки используются правильно, по полученным данным они используются только в start_requests
