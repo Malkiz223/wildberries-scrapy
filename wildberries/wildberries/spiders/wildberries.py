@@ -44,7 +44,8 @@ class WildberriesSpider(scrapy.Spider):
 
     def start_requests(self):
         for url in self.start_urls:
-            yield scrapy.Request(url,
+            yield scrapy.Request(url=url,
+                                 callback=self.parse_catalog,
                                  cookies=self.cookies,
                                  callback=self.parse_catalog)
 
@@ -59,13 +60,17 @@ class WildberriesSpider(scrapy.Spider):
             product_url = product.css('.product-card__main.j-open-full-product-card::attr(href)').get()
             product_url = response.urljoin(product_url)
             product_urls.append(product_url)
-            yield scrapy.Request(url=product_url, callback=self.parse_product_details, cookies=self.cookies,
+            yield scrapy.Request(url=product_url,
+                                 callback=self.parse_product_details,
+                                 cookies=self.cookies,
                                  meta={'proxy': random.choice(self.proxy_list)})
 
         next_page_button_url = response.css('.pagination__next::attr(href)').get()
         if next_page_button_url:
             next_page_url = response.urljoin(next_page_button_url)
-            yield scrapy.Request(url=next_page_url, callback=self.parse_catalog, cookies=self.cookies,
+            yield scrapy.Request(url=next_page_url,
+                                 callback=self.parse_catalog,
+                                 cookies=self.cookies,
                                  meta={'proxy': random.choice(self.proxy_list)})
 
     def parse_product_details(self, response):
