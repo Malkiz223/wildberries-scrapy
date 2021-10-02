@@ -48,12 +48,10 @@ class WildberriesSpider(scrapy.Spider):
 
     def parse_catalog(self, response):
         # не уверен, что куки используются правильно, по полученным данным они используются только в start_requests
-        # cookie = response.headers.getlist('Set-Cookie')
-        # self.log(cookie)
-        all_products_on_page = response.css('.product-card__wrapper')
+        products_on_page = response.css('.product-card__wrapper')
 
         product_urls = []
-        for product in all_products_on_page:
+        for product in products_on_page:
             product_url = product.css('.product-card__main.j-open-full-product-card::attr(href)').get()
             product_url = response.urljoin(product_url)
             product_urls.append(product_url)
@@ -83,43 +81,44 @@ class WildberriesSpider(scrapy.Spider):
         product_data_json = tag_with_product_data[start_json:end_json]
         product_data: dict = json.loads(product_data_json)
 
-        product_id = str(final_data.get('rqCod1S'))  # RPC в словаре
-        nomenclatures_by_product_id: dict = final_data.get('productCard').get('nomenclatures').get(product_id)
+        product_id = str(product_data.get('rqCod1S'))  # RPC в словаре
+        nomenclatures_by_product_id: dict = product_data.get('productCard').get('nomenclatures').get(product_id)
 
-        product_name = final_data.get('productCard').get('goodsName')
-        product_color = nomenclatures_by_product_id.get('colorName')
+        product_name = product_data.get('productCard').get('goodsName', '')
+        product_color = nomenclatures_by_product_id.get('colorName', '')
         if product_color:
-            title = f'{product_name}, {product_color}'
+            product_title = f'{product_name}, {product_color}'
         else:
-            title = product_name
+            product_title = product_name
 
         try:  # возможно, нужна сумма 'quantity' из всех 'sizes' (сумма товаров по всем размерам модели)
-            product_quantity = nomenclatures_by_product_id.get('sizes')[0].get('quantity', 0)
+            product_quantity: int = nomenclatures_by_product_id.get('sizes')[0].get('quantity', 0)
         except IndexError:
             product_quantity = 0
 
-        section_len = len(final_data.get('sitePath', []))  # количество разделов, в котором находится продукт
+        section_len = len(product_data.get('sitePath', []))  # количество разделов, в котором находится продукт
         section = []
-        if section_len >= 1:
-            for i in range(section_len - 1):  # последний раздел - имя бренда
-                section.append(final_data['sitePath'][i]['name'])
+        if section_len > 0:
+            for i in range(section_len - 1):  # последний раздел - имя бренда, его не вносим в список разделов
+                section.append(product_data['sitePath'][i].get('name'))
 
-        original_price = final_data.get('priceForProduct').get('price')
-        current_price = final_data.get('priceForProduct').get('priceWithSale') or original_price
+        original_price = product_data.get('priceForProduct').get('price')
+        current_price = product_data.get('priceForProduct').get('priceWithSale') or original_price
         try:
             sale_percent: float = round(100 - current_price * 100 / original_price, 2)  # 42.93
         except ZeroDivisionError:
-            sale_percent: int = final_data.get('priceForProduct').get('sale')  # парсим скидку в процентах с сайта
+            sale_percent: int = product_data.get('priceForProduct').get('sale')  # парсим скидку в процентах с сайта
         sale_tag = f'Скидка {sale_percent}%' if sale_percent else ''
 
-        try:
-            main_image = final_data.get('selectedNomenclature').get('imageHelper')[0].get('zoom')
-        except IndexError:
+        product_images: list = product_data.get('selectedNomenclature').get('imageHelper')
+        if len(product_images) > 0:
+            main_image: str = product_images[0].get('zoom', '')
+        else:
             main_image = ''
-        number_of_product_images = len(final_data.get('selectedNomenclature').get('imageHelper'))
+        number_of_product_images = len(product_images)
         all_images = []
         for i in range(number_of_product_images):
-            image_url = final_data.get('selectedNomenclature').get('imageHelper')[i].get('zoom')
+            image_url = product_images[i].get('zoom')
             all_images.append(image_url)
 
         has_3d_view = nomenclatures_by_product_id.get('has3DView')
@@ -140,21 +139,21 @@ class WildberriesSpider(scrapy.Spider):
             video_url = ''
 
         product_metadata = dict()  # свойства продукта - страна производитель, материал, особенности модели и тд
-        product_metadata['__description'] = final_data.get('productCard').get('description')
-        # нужно ли вручную указывать артикул товара для wildberries, если он совпадает с RPC и отсутствует в property?
-        product_options = final_data.get('productCard').get('addedOptions')
+        product_metadata['__description'] = product_data.get('productCard').get('description', '')
+        # нужно ли указывать артикул товара для wildberries, если он совпадает с RPC и отсутствует в property?
+        product_options = product_data.get('productCard').get('addedOptions')
         for i in range(len(product_options)):
-            product_property = product_options[i]['property']
-            product_subproperty = product_options[i]['subProperty']
+            product_property = product_options[i].get('property', '')
+            product_subproperty = product_options[i].get('subProperty', '')
             product_metadata[product_property] = product_subproperty
 
         yield {
             'timestamp': datetime.utcnow(),
             'RPC': product_id,
             'url': response.url,
-            'title': title,
+            'title': product_title,
             'marketing_tags': [],  # не нашёл на Wildberries подобные товары, но нашёл в json поле promoText, не уверен
-            'brand': final_data.get('productCard').get('brandName'),
+            'brand': product_data.get('productCard').get('brandName', ''),
             'section': section,
             'price_data': {
                 'current': float(current_price),
@@ -172,5 +171,5 @@ class WildberriesSpider(scrapy.Spider):
                 'video': video_url
             },
             'metadata': product_metadata,
-            'variants': len(final_data.get('properNomenclaturesOrder', 1))
+            'variants': len(product_data.get('properNomenclaturesOrder', 1))
         }
