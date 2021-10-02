@@ -71,13 +71,17 @@ class WildberriesSpider(scrapy.Spider):
                                  meta={'proxy': random.choice(self.proxy_list)})
 
     def parse_product_details(self, response):
-        pattern = re.compile(r"ssrModel: {\"staticResourses\":.*}}")
-        script = response.xpath("//script[contains(., 'staticResourses')]/text()").get()
-        data = pattern.search(script)
-        start_json = data.start() + 10  # оффсет из-за регулярки
-        end_json = data.end()
-        data_json = script[start_json:end_json]
-        final_data: dict = json.loads(data_json)
+        # в теле страницы лежит JSON с данными о товаре, некоторые данные нельзя получить без этого JSON'а
+        # ищем внутри всех тегов <script> JSON с ключом "ssrModel" и вытягиваем значение этого ключа
+        product_json_data_pattern = re.compile(r"ssrModel: {\"staticResourses\":.*}}")
+        tag_with_product_data: str = response.xpath("//script[contains(., 'staticResourses')]/text()").get()
+        # получаем данные в виде объекта регулярки, получаем индексы начала и конца требуемого JSON'а
+        string_with_product_json = product_json_data_pattern.search(tag_with_product_data)
+        start_json = string_with_product_json.start() + 10  # оффсет с учётом длины регулярки
+        end_json = string_with_product_json.end()
+        # получаем полные данные о продукте
+        product_data_json = tag_with_product_data[start_json:end_json]
+        product_data: dict = json.loads(product_data_json)
 
         product_id = str(final_data.get('rqCod1S'))  # RPC в словаре
         nomenclatures_by_product_id: dict = final_data.get('productCard').get('nomenclatures').get(product_id)
