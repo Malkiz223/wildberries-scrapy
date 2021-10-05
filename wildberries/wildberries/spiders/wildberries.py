@@ -4,11 +4,14 @@ from datetime import datetime
 
 import scrapy
 
+from ..items import WildberriesItem
+
 
 class WildberriesSpider(scrapy.Spider):
     name = 'wildberries'
     allowed_domains = ['wildberries.ru']
     start_urls = ['https://www.wildberries.ru/catalog/aksessuary/veera']  # указываем желаемую категорию
+    items = WildberriesItem()
     # г. Москва, ул. Арбат 4, с. 1
     cookies = {
         '__wbl': 'cityId%3D0%26regionId%3D0%26city%3D%D0%B3%20%D0%9C%D0%BE%D1%81%D0%BA%D0%B2%D0%B0%2C%20%D0%A3%D0%BB%D0%B8%D1%86%D0%B0%20%D0%90%D1%80%D0%B1%D0%B0%D1%82%204%D1%811%26phone%3D88001007505%26latitude%3D55%2C752114%26longitude%3D37%2C598587%26src%3D1',
@@ -139,29 +142,29 @@ class WildberriesSpider(scrapy.Spider):
             product_subproperty = product_options[i].get('subProperty', '')
             product_metadata[product_property] = product_subproperty
 
-        yield {
-            'timestamp': datetime.utcnow(),
-            'RPC': product_id,
-            'url': response.url,
-            'title': product_title,
-            'marketing_tags': [],  # не нашёл на Wildberries подобные товары, но нашёл в json поле promoText, не уверен
-            'brand': product_data.get('productCard').get('brandName', ''),
-            'section': section,
-            'price_data': {
-                'current': float(current_price),
-                'original': float(original_price),
-                'sale_tag': sale_tag
-            },
-            'stock': {
-                'in_stock': not nomenclatures_by_product_id.get('soldOut'),  # False if 'soldOut': true
-                'count': product_quantity
-            },
-            'assets': {
-                'main_image': main_image,
-                'set_images': all_images,  # все боковые картинки товара, включая основное изображение
-                'view360': view_360_images,
-                'video': video_url
-            },
-            'metadata': product_metadata,
-            'variants': len(product_data.get('properNomenclaturesOrder', 1))
+        self.items['timestamp'] = datetime.utcnow()
+        self.items['RPC'] = product_id
+        self.items['url'] = response.url
+        self.items['title'] = product_title
+        self.items['marketing_tags'] = []  # не нашёл на Wildberries подобные товары, но нашёл в json поле promoText
+        self.items['brand'] = product_data.get('productCard').get('brandName', '')
+        self.items['section'] = section
+        self.items['price_data'] = {
+            'current': float(current_price),
+            'original': float(original_price),
+            'sale_tag': sale_tag
         }
+        self.items['stock'] = {
+            'in_stock': not nomenclatures_by_product_id.get('soldOut'),  # False if 'soldOut': true
+            'count': product_quantity
+        }
+        self.items['assets'] = {
+            'main_image': main_image,
+            'set_images': all_images,  # все боковые картинки товара, включая основное изображение
+            'view360': view_360_images,
+            'video': video_url
+        }
+        self.items['metadata'] = product_metadata
+        self.items['variants'] = len(product_data.get('properNomenclaturesOrder', 1))
+
+        yield self.items
