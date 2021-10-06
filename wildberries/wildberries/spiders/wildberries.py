@@ -52,23 +52,19 @@ class WildberriesSpider(scrapy.Spider):
         # не уверен, что куки используются правильно, по полученным данным они используются только в start_requests
         products_on_page = response.css('.product-card__wrapper')
 
-        product_urls = []
         for product in products_on_page:
             product_url = product.css('.product-card__main.j-open-full-product-card::attr(href)').get()
-            product_url = response.urljoin(product_url)
-            product_urls.append(product_url)
-            yield scrapy.Request(url=product_url,
-                                 callback=self.parse_product_details,
-                                 cookies=self.cookies,
-                                 meta={'proxy': random.choice(self.proxy_list)})
+            yield response.follow(url=product_url,
+                                  callback=self.parse_product_details,
+                                  cookies=self.cookies,
+                                  meta={'proxy': random.choice(self.proxy_list)})
 
         next_page_button_url = response.css('.pagination__next::attr(href)').get()
         if next_page_button_url:
-            next_page_url = response.urljoin(next_page_button_url)
-            yield scrapy.Request(url=next_page_url,
-                                 callback=self.parse_catalog,
-                                 cookies=self.cookies,
-                                 meta={'proxy': random.choice(self.proxy_list)})
+            yield response.follow(url=next_page_button_url,
+                                  callback=self.parse_catalog,
+                                  cookies=self.cookies,
+                                  meta={'proxy': random.choice(self.proxy_list)})
 
     def parse_product_details(self, response):
         # в теле страницы лежит JSON с данными о товаре, некоторые данные нельзя получить без этого JSON'а
